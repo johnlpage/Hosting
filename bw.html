@@ -1,0 +1,707 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>Database Throughput vs Latency Demo</title>  
+    <style>  
+        * {  
+            margin: 0;  
+            padding: 0;  
+            box-sizing: border-box;  
+        }  
+  
+        body {  
+            font-family: 'Euclid Circular A', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;  
+            background: linear-gradient(135deg, #001E2B 0%, #00684A 100%);  
+            min-height: 100vh;  
+            padding: 20px;  
+            color: #fff;  
+        }  
+  
+        .container {  
+            max-width: 1400px;  
+            margin: 0 auto;  
+            background: rgba(0, 30, 43, 0.8);  
+            border-radius: 20px;  
+            padding: 30px;  
+            backdrop-filter: blur(10px);  
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);  
+            border: 1px solid rgba(0, 237, 100, 0.2);  
+        }  
+  
+        h1 {  
+            text-align: center;  
+            margin-bottom: 10px;  
+            font-size: 2em;  
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);  
+            color: #00ED64;  
+        }  
+  
+        .subtitle {  
+            text-align: center;  
+            margin-bottom: 30px;  
+            font-size: 1.1em;  
+            opacity: 0.9;  
+            color: #E3FCF7;  
+        }  
+  
+        .controls {  
+            display: grid;  
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));  
+            gap: 20px;  
+            margin-bottom: 30px;  
+            background: rgba(0, 104, 74, 0.3);  
+            padding: 20px;  
+            border-radius: 15px;  
+            border: 1px solid rgba(0, 237, 100, 0.3);  
+        }  
+  
+        .control-group {  
+            display: flex;  
+            flex-direction: column;  
+        }  
+  
+        label {  
+            font-weight: 600;  
+            margin-bottom: 8px;  
+            font-size: 0.95em;  
+            color: #E3FCF7;  
+        }  
+  
+        input[type="range"] {  
+            width: 100%;  
+            height: 8px;  
+            border-radius: 5px;  
+            background: rgba(0, 104, 74, 0.5);  
+            outline: none;  
+            -webkit-appearance: none;  
+        }  
+  
+        input[type="range"]::-webkit-slider-thumb {  
+            -webkit-appearance: none;  
+            appearance: none;  
+            width: 20px;  
+            height: 20px;  
+            border-radius: 50%;  
+            background: #00ED64;  
+            cursor: pointer;  
+            box-shadow: 0 2px 8px rgba(0, 237, 100, 0.5);  
+        }  
+  
+        input[type="range"]::-moz-range-thumb {  
+            width: 20px;  
+            height: 20px;  
+            border-radius: 50%;  
+            background: #00ED64;  
+            cursor: pointer;  
+            box-shadow: 0 2px 8px rgba(0, 237, 100, 0.5);  
+            border: none;  
+        }  
+  
+        .value-display {  
+            text-align: center;  
+            font-size: 1.3em;  
+            font-weight: bold;  
+            margin-top: 5px;  
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);  
+            color: #00ED64;  
+        }  
+  
+        #canvas {  
+            width: 100%;  
+            height: 500px;  
+            background: #FFFFFF;  
+            border-radius: 15px;  
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);  
+            display: block;  
+        }  
+  
+        .stats {  
+            display: grid;  
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));  
+            gap: 15px;  
+            margin-top: 30px;  
+        }  
+  
+        .stat-box {  
+            background: rgba(0, 104, 74, 0.4);  
+            padding: 20px;  
+            border-radius: 12px;  
+            text-align: center;  
+            backdrop-filter: blur(5px);  
+            border: 1px solid rgba(0, 237, 100, 0.3);  
+        }  
+  
+        .stat-label {  
+            font-size: 0.9em;  
+            opacity: 0.9;  
+            margin-bottom: 8px;  
+            color: #E3FCF7;  
+        }  
+  
+        .stat-value {  
+            font-size: 2em;  
+            font-weight: bold;  
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);  
+            color: #00ED64;  
+        }  
+  
+        .stat-warning {  
+            color: #FFE212;  
+        }  
+  
+        .legend {  
+            display: flex;  
+            justify-content: center;  
+            gap: 30px;  
+            margin-top: 20px;  
+            flex-wrap: wrap;  
+        }  
+  
+        .legend-item {  
+            display: flex;  
+            align-items: center;  
+            gap: 10px;  
+            color: #E3FCF7;  
+        }  
+  
+        .legend-color {  
+            width: 30px;  
+            height: 15px;  
+            border-radius: 3px;  
+        }  
+    </style>  
+</head>  
+<body>  
+    <div class="container">  
+        <h1>🔄 Database Throughput vs Latency</h1>  
+        <p class="subtitle">Visualize how network capacity and database processing time affect response latency</p>  
+          
+        <div class="controls">  
+            <div class="control-group">  
+                <label for="arrivalRate">📊 Request Arrival Rate (req/s)</label>  
+                <input type="range" id="arrivalRate" min="0" max="1000" value="10" step="1">  
+                <div class="value-display" id="arrivalRateValue">10</div>  
+            </div>  
+              
+            <div class="control-group">  
+                <label for="pipeWidth">🚰 Network Bandwidth (req/s throughput)</label>  
+                <input type="range" id="pipeWidth" min="1" max="1000" value="50" step="1">  
+                <div class="value-display" id="pipeWidthValue">50</div>  
+            </div>  
+              
+            <div class="control-group">  
+                <label for="dbThroughput">⚡ Database Max Throughput (docs/s)</label>  
+                <input type="range" id="dbThroughput" min="1" max="1000" value="100" step="1">  
+                <div class="value-display" id="dbThroughputValue">100</div>  
+            </div>  
+        </div>  
+  
+        <canvas id="canvas"></canvas>  
+  
+        <div class="stats">  
+            <div class="stat-box">  
+                <div class="stat-label">Average Latency</div>  
+                <div class="stat-value" id="avgLatency">0ms</div>  
+            </div>  
+            <div class="stat-box">  
+                <div class="stat-label">Network Queue</div>  
+                <div class="stat-value" id="queueSize">0</div>  
+            </div>  
+            <div class="stat-box">  
+                <div class="stat-label">In Transit (Outbound)</div>  
+                <div class="stat-value" id="inTransit">0</div>  
+            </div>  
+            <div class="stat-box">  
+                <div class="stat-label">At Database</div>  
+                <div class="stat-value" id="atDatabase">0</div>  
+            </div>  
+            <div class="stat-box">  
+                <div class="stat-label">Actual DB Throughput</div>  
+                <div class="stat-value" id="actualThroughput">0</div>  
+            </div>  
+            <div class="stat-box">  
+                <div class="stat-label">Returning</div>  
+                <div class="stat-value" id="returning">0</div>  
+            </div>  
+            <div class="stat-box">  
+                <div class="stat-label">Completed Requests</div>  
+                <div class="stat-value" id="completed">0</div>  
+            </div>  
+        </div>  
+  
+        <div class="legend">  
+            <div class="legend-item">  
+                <div class="legend-color" style="background: #FFE212;"></div>  
+                <span>Queued Request</span>  
+            </div>  
+            <div class="legend-item">  
+                <div class="legend-color" style="background: #00ED64;"></div>  
+                <span>In Transit to Database</span>  
+            </div>  
+            <div class="legend-item">  
+                <div class="legend-color" style="background: #00684A;"></div>  
+                <span>Processing at Database</span>  
+            </div>  
+            <div class="legend-item">  
+                <div class="legend-color" style="background: #001E2B;"></div>  
+                <span>Returning to Client</span>  
+            </div>  
+        </div>  
+    </div>  
+  
+    <script>  
+        const canvas = document.getElementById('canvas');  
+        const ctx = canvas.getContext('2d');  
+          
+        // MongoDB Brand Colors  
+        const MONGODB_COLORS = {  
+            green: '#00ED64',  
+            darkGreen: '#00684A',  
+            slate: '#001E2B',  
+            yellow: '#FFE212',  
+            lightGreen: '#E3FCF7',  
+            white: '#FFFFFF'  
+        };  
+          
+        // Set canvas size  
+        function resizeCanvas() {  
+            const rect = canvas.getBoundingClientRect();  
+            canvas.width = rect.width;  
+            canvas.height = rect.height;  
+        }  
+        resizeCanvas();  
+        window.addEventListener('resize', resizeCanvas);  
+  
+        // Configuration  
+        let config = {  
+            arrivalRate: 10,  
+            pipeWidth: 50,  
+            dbThroughput: 100  // Maximum documents per second the database can process  
+        };  
+  
+        // Path points  
+        const leftX = 50;  
+        let pipeStartX = canvas.width * 0.25;  
+        let pipeEndX = canvas.width * 0.75;  
+        const rightX = canvas.width - 50;  
+        let circleX = (pipeEndX + rightX) / 2;  
+        const circleY = canvas.height / 2;  
+        const circleRadius = 60;  
+  
+        // Transit time through pipe (in milliseconds)  
+        const PIPE_TRANSIT_TIME = 300;  
+  
+        // Database throughput tracking  
+        let dbProcessedCount = 0;  
+        let dbProcessedLastSecond = 0;  
+        let lastThroughputCheck = Date.now();  
+  
+        // Dynamic pipe dimensions  
+        function getPipeHeight() {  
+            return Math.min(200, Math.max(10, 10 + (config.pipeWidth / 1000) * 190));  
+        }  
+  
+        function getTopPipeY() {  
+            const pipeHeight = getPipeHeight();  
+            return circleY - pipeHeight / 2 - 20;  
+        }  
+  
+        function getBottomPipeY() {  
+            const pipeHeight = getPipeHeight();  
+            return circleY + pipeHeight / 2 + 20;  
+        }  
+  
+        // Calculate current database throughput based on load  
+        function getCurrentDbThroughput() {  
+            const atDb = messages.filter(m =>   
+                m.state === 'atDatabase' || m.state === 'waitingAtDatabase'  
+            ).length;  
+              
+            // When database has more docs than max throughput, it slows down  
+            // Throughput degrades linearly as load increases beyond capacity  
+            if (atDb <= config.dbThroughput) {  
+                return config.dbThroughput;  
+            } else {  
+                // Throughput drops as load increases  
+                // At 2x capacity, throughput is 50% of max  
+                // At 3x capacity, throughput is 33% of max, etc.  
+                const overloadFactor = atDb / config.dbThroughput;  
+                return config.dbThroughput / overloadFactor;  
+            }  
+        }  
+  
+        // Message states  
+        const messages = [];  
+        let nextMessageId = 0;  
+        let lastArrivalTime = 0;  
+        let lastPipeEntryTime = 0;  
+        let lastDbProcessTime = 0;  
+        let completedCount = 0;  
+        let latencySum = 0;  
+        let recentLatencies = [];  
+  
+        class Message {  
+            constructor() {  
+                this.id = nextMessageId++;  
+                this.state = 'arriving';  
+                this.x = leftX;  
+                this.y = Math.random() * canvas.height;  
+                this.arrivalTime = Date.now();  
+                this.targetY = getTopPipeY();  
+                this.angle = 0;  
+                this.speed = 3;  
+                this.queuePosition = 0;  
+                this.laneOffset = 0;  
+                this.pipeEntryTime = null;  
+                this.dbStartTime = null;  
+            }  
+  
+            update() {  
+                const now = Date.now();  
+                  
+                switch(this.state) {  
+                    case 'arriving':  
+                        this.x += this.speed;  
+                        this.targetY = getTopPipeY();  
+                        this.y += (this.targetY - this.y) * 0.05;  
+                          
+                        if (this.x >= pipeStartX) {  
+                            // Network bandwidth limit  
+                            const msPerRequest = 1000 / config.pipeWidth;  
+                              
+                            if (now - lastPipeEntryTime >= msPerRequest) {  
+                                this.state = 'toDatabase';  
+                                this.pipeEntryTime = now;  
+                                this.assignLane();  
+                                lastPipeEntryTime = now;  
+                            } else {  
+                                this.state = 'queued';  
+                                this.updateQueuePosition();  
+                            }  
+                        }  
+                        break;  
+  
+                    case 'queued':  
+                        const queuedMsgs = messages.filter(m => m.state === 'queued');  
+                        this.queuePosition = queuedMsgs.indexOf(this);  
+                        const cols = Math.min(20, Math.ceil(Math.sqrt(queuedMsgs.length)));  
+                        const row = Math.floor(this.queuePosition / cols);  
+                        const col = this.queuePosition % cols;  
+                          
+                        this.x = pipeStartX - 40 - (col * 12);  
+                        this.y = getTopPipeY() + (row * 12) - 20;  
+                          
+                        // Network bandwidth limit - but also check database backpressure  
+                        const msPerRequest = 1000 / config.pipeWidth;  
+                        const atDb = messages.filter(m =>   
+                            m.state === 'atDatabase' || m.state === 'waitingAtDatabase'  
+                        ).length;  
+                          
+                        // Apply backpressure if database is overloaded  
+                        const backpressureFactor = atDb > config.dbThroughput * 2 ?   
+                            (atDb / (config.dbThroughput * 2)) : 1;  
+                          
+                        if (this.queuePosition === 0 &&   
+                            now - lastPipeEntryTime >= msPerRequest * backpressureFactor) {  
+                            this.state = 'toDatabase';  
+                            this.pipeEntryTime = now;  
+                            this.assignLane();  
+                            lastPipeEntryTime = now;  
+                        }  
+                        break;  
+  
+                    case 'toDatabase':  
+                        const timeInPipe = now - this.pipeEntryTime;  
+                        const pipeProgress = Math.min(1, timeInPipe / PIPE_TRANSIT_TIME);  
+                          
+                        this.x = pipeStartX + (pipeEndX - pipeStartX) * pipeProgress;  
+                        const topPipeY = getTopPipeY();  
+                        const pipeHeight = getPipeHeight();  
+                        this.y = topPipeY + this.laneOffset * pipeHeight;  
+                          
+                        if (pipeProgress >= 1) {  
+                            this.state = 'waitingAtDatabase';  
+                        }  
+                        break;  
+  
+                    case 'waitingAtDatabase':  
+                        // Position at database entrance  
+                        this.angle = Math.PI;  
+                        this.x = circleX + Math.cos(this.angle) * circleRadius;  
+                        this.y = circleY + Math.sin(this.angle) * circleRadius;  
+                          
+                        // Check if database can start processing based on current throughput  
+                        const currentThroughput = getCurrentDbThroughput();  
+                        const msPerDoc = 1000 / currentThroughput;  
+                          
+                        if (now - lastDbProcessTime >= msPerDoc) {  
+                            this.state = 'atDatabase';  
+                            this.dbStartTime = now;  
+                            this.processingTime = msPerDoc;  
+                            lastDbProcessTime = now;  
+                        }  
+                        break;  
+  
+                    case 'atDatabase':  
+                        // Process at database  
+                        const timeProcessing = now - this.dbStartTime;  
+                        const processProgress = timeProcessing / this.processingTime;  
+                          
+                        if (processProgress >= 1) {  
+                            this.state = 'returning';  
+                            this.returnStartTime = now;  
+                            this.assignReturnLane();  
+                            dbProcessedCount++;  
+                        } else {  
+                            // Animate around the circle  
+                            this.angle = Math.PI + (processProgress * Math.PI * 2);  
+                            this.x = circleX + Math.cos(this.angle) * circleRadius;  
+                            this.y = circleY + Math.sin(this.angle) * circleRadius;  
+                        }  
+                        break;  
+  
+                    case 'returning':  
+                        const timeReturning = now - this.returnStartTime;  
+                        const returnProgress = Math.min(1, timeReturning / PIPE_TRANSIT_TIME);  
+                          
+                        this.x = pipeEndX - (pipeEndX - pipeStartX) * returnProgress;  
+                        const bottomPipeY = getBottomPipeY();  
+                        const returnPipeHeight = getPipeHeight();  
+                        this.y = bottomPipeY + this.laneOffset * returnPipeHeight;  
+                          
+                        if (returnProgress >= 1) {  
+                            this.state = 'completingReturn';  
+                        }  
+                        break;  
+  
+                    case 'completingReturn':  
+                        this.x -= this.speed;  
+                          
+                        if (this.x <= leftX) {  
+                            this.state = 'completed';  
+                            const latency = now - this.arrivalTime;  
+                            latencySum += latency;  
+                            completedCount++;  
+                              
+                            recentLatencies.push(latency);  
+                            if (recentLatencies.length > 100) {  
+                                recentLatencies.shift();  
+                            }  
+                        }  
+                        break;  
+                }  
+            }  
+  
+            assignLane() {  
+                this.laneOffset = Math.random() * 0.8 + 0.1;  
+            }  
+  
+            assignReturnLane() {  
+                this.laneOffset = Math.random() * 0.8 + 0.1;  
+            }  
+  
+            updateQueuePosition() {  
+                const queuedMessages = messages.filter(m => m.state === 'queued');  
+                this.queuePosition = queuedMessages.indexOf(this);  
+            }  
+  
+            draw() {  
+                if (this.state === 'completed') return;  
+  
+                let color;  
+                switch(this.state) {  
+                    case 'arriving':  
+                    case 'queued':  
+                        color = MONGODB_COLORS.yellow;  
+                        break;  
+                    case 'toDatabase':  
+                        color = MONGODB_COLORS.green;  
+                        break;  
+                    case 'waitingAtDatabase':  
+                    case 'atDatabase':  
+                        color = MONGODB_COLORS.darkGreen;  
+                        break;  
+                    case 'returning':  
+                    case 'completingReturn':  
+                        color = MONGODB_COLORS.slate;  
+                        break;  
+                }  
+  
+                ctx.fillStyle = color;  
+                ctx.beginPath();  
+                ctx.arc(this.x, this.y, 5, 0, Math.PI * 2);  
+                ctx.fill();  
+                  
+                if (messages.length < 500) {  
+                    ctx.shadowBlur = 8;  
+                    ctx.shadowColor = color;  
+                    ctx.fill();  
+                    ctx.shadowBlur = 0;  
+                }  
+            }  
+        }  
+  
+        function drawInfrastructure() {  
+            const pipeHeight = getPipeHeight();  
+            const topPipeY = getTopPipeY();  
+            const bottomPipeY = getBottomPipeY();  
+              
+            // Draw top pipe  
+            const topGradient = ctx.createLinearGradient(pipeStartX, topPipeY - pipeHeight/2, pipeStartX, topPipeY + pipeHeight/2);  
+            topGradient.addColorStop(0, 'rgba(0, 237, 100, 0.2)');  
+            topGradient.addColorStop(0.5, 'rgba(0, 237, 100, 0.4)');  
+            topGradient.addColorStop(1, 'rgba(0, 237, 100, 0.2)');  
+              
+            ctx.fillStyle = topGradient;  
+            ctx.fillRect(pipeStartX, topPipeY - pipeHeight/2, pipeEndX - pipeStartX, pipeHeight);  
+            ctx.strokeStyle = MONGODB_COLORS.green;  
+            ctx.lineWidth = 3;  
+            ctx.strokeRect(pipeStartX, topPipeY - pipeHeight/2, pipeEndX - pipeStartX, pipeHeight);  
+              
+            // Draw bottom pipe  
+            const bottomGradient = ctx.createLinearGradient(pipeStartX, bottomPipeY - pipeHeight/2, pipeStartX, bottomPipeY + pipeHeight/2);  
+            bottomGradient.addColorStop(0, 'rgba(0, 30, 43, 0.2)');  
+            bottomGradient.addColorStop(0.5, 'rgba(0, 30, 43, 0.4)');  
+            bottomGradient.addColorStop(1, 'rgba(0, 30, 43, 0.2)');  
+              
+            ctx.fillStyle = bottomGradient;  
+            ctx.fillRect(pipeStartX, bottomPipeY - pipeHeight/2, pipeEndX - pipeStartX, pipeHeight);  
+            ctx.strokeStyle = MONGODB_COLORS.slate;  
+            ctx.lineWidth = 3;  
+            ctx.strokeRect(pipeStartX, bottomPipeY - pipeHeight/2, pipeEndX - pipeStartX, pipeHeight);  
+              
+            // Calculate database load  
+            const atDb = messages.filter(m =>   
+                m.state === 'atDatabase' || m.state === 'waitingAtDatabase'  
+            ).length;  
+            const loadRatio = Math.min(2, atDb / config.dbThroughput);  
+              
+            // Draw circle - gets more intense red when overloaded  
+            const circleGradient = ctx.createRadialGradient(circleX, circleY, 0, circleX, circleY, circleRadius);  
+              
+            if (loadRatio > 1) {  
+                // Overloaded - show warning color  
+                const overloadAmount = (loadRatio - 1);  
+                circleGradient.addColorStop(0, `rgba(255, 226, 18, ${0.3 + overloadAmount * 0.3})`);  
+                circleGradient.addColorStop(1, `rgba(0, 104, 74, ${0.2 + overloadAmount * 0.2})`);  
+            } else {  
+                circleGradient.addColorStop(0, `rgba(0, 104, 74, ${0.3 + loadRatio * 0.2})`);  
+                circleGradient.addColorStop(1, `rgba(0, 104, 74, ${0.1 + loadRatio * 0.1})`);  
+            }  
+              
+            ctx.fillStyle = circleGradient;  
+            ctx.beginPath();  
+            ctx.arc(circleX, circleY, circleRadius, 0, Math.PI * 2);  
+            ctx.fill();  
+              
+            // Border color changes when overloaded  
+            ctx.strokeStyle = loadRatio > 1 ? MONGODB_COLORS.yellow : MONGODB_COLORS.darkGreen;  
+            ctx.lineWidth = 4;  
+            ctx.stroke();  
+              
+            // Database label  
+            ctx.fillStyle = loadRatio > 1 ? MONGODB_COLORS.yellow : MONGODB_COLORS.darkGreen;  
+            ctx.font = 'bold 16px Arial';  
+            ctx.textAlign = 'center';  
+            ctx.fillText('DATABASE', circleX, circleY - 5);  
+            ctx.font = '12px Arial';  
+            ctx.fillText(`Max: ${config.dbThroughput} docs/s`, circleX, circleY + 10);  
+              
+            if (loadRatio > 1) {  
+                ctx.fillStyle = MONGODB_COLORS.yellow;  
+                ctx.font = 'bold 10px Arial';  
+                ctx.fillText('OVERLOADED!', circleX, circleY + 22);  
+            }  
+              
+            // Labels  
+            ctx.font = 'bold 14px Arial';  
+            ctx.fillStyle = MONGODB_COLORS.slate;  
+            ctx.fillText('Client', leftX, 30);  
+            ctx.fillStyle = MONGODB_COLORS.green;  
+            ctx.fillText(`Network: ${config.pipeWidth} req/s`, (pipeStartX + pipeEndX) / 2, topPipeY - pipeHeight/2 - 15);  
+        }  
+  
+        function animate() {  
+            ctx.clearRect(0, 0, canvas.width, canvas.height);  
+              
+            drawInfrastructure();  
+              
+            const now = Date.now();  
+              
+            // Track actual throughput  
+            if (now - lastThroughputCheck >= 1000) {  
+                dbProcessedLastSecond = dbProcessedCount;  
+                dbProcessedCount = 0;  
+                lastThroughputCheck = now;  
+            }  
+              
+            if (config.arrivalRate > 0) {  
+                const interval = 1000 / config.arrivalRate;  
+                if (now - lastArrivalTime >= interval) {  
+                    messages.push(new Message());  
+                    lastArrivalTime = now;  
+                }  
+            }  
+              
+            messages.forEach(msg => {  
+                msg.update();  
+                msg.draw();  
+            });  
+              
+            for (let i = messages.length - 1; i >= 0; i--) {  
+                if (messages[i].state === 'completed') {  
+                    messages.splice(i, 1);  
+                }  
+            }  
+              
+            const queuedCount = messages.filter(m => m.state === 'queued').length;  
+            const inTransitCount = messages.filter(m => m.state === 'toDatabase').length;  
+            const atDatabaseCount = messages.filter(m =>   
+                m.state === 'atDatabase' || m.state === 'waitingAtDatabase'  
+            ).length;  
+            const returningCount = messages.filter(m =>   
+                m.state === 'returning' || m.state === 'completingReturn'  
+            ).length;  
+              
+            document.getElementById('queueSize').textContent = queuedCount;  
+            document.getElementById('inTransit').textContent = inTransitCount;  
+              
+            const atDbElement = document.getElementById('atDatabase');  
+            atDbElement.textContent = atDatabaseCount;  
+            atDbElement.className = atDatabaseCount > config.dbThroughput ? 'stat-value stat-warning' : 'stat-value';  
+              
+            document.getElementById('actualThroughput').textContent = dbProcessedLastSecond + '/s';  
+            document.getElementById('returning').textContent = returningCount;  
+            document.getElementById('completed').textContent = completedCount;  
+              
+            if (recentLatencies.length > 0) {  
+                const avgLatency = Math.round(recentLatencies.reduce((a, b) => a + b, 0) / recentLatencies.length);  
+                document.getElementById('avgLatency').textContent = avgLatency + 'ms';  
+            }  
+              
+            requestAnimationFrame(animate);  
+        }  
+  
+        // Control handlers  
+        document.getElementById('arrivalRate').addEventListener('input', (e) => {  
+            config.arrivalRate = parseInt(e.target.value);  
+            document.getElementById('arrivalRateValue').textContent = config.arrivalRate;  
+        });  
+  
+        document.getElementById('pipeWidth').addEventListener('input', (e) => {  
+            config.pipeWidth = parseInt(e.target.value);  
+            document.getElementById('pipeWidthValue').textContent = config.pipeWidth;  
+        });  
+  
+        document.getElementById('dbThroughput').addEventListener('input', (e) => {  
+            config.dbThroughput = parseInt(e.target.value);  
+            document.getElementById('dbThroughputValue').textContent = config.dbThroughput;  
+        });  
+  
+        // Start animation  
+        animate();  
+    </script>  
+</body>  
+</html>  
